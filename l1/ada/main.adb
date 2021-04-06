@@ -201,7 +201,6 @@ procedure main is
    task body Taskvertex is 
       ver: Verticle;
       numm, where : Integer;
-      --type randRange2 is new Integer range 0..Parameters.n-1;
       package Rand_Int is new ada.numerics.discrete_random(Integer);
       use Rand_Int;
       gen2 : Generator;
