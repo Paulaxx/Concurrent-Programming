@@ -4,10 +4,12 @@ with Ada.Integer_Text_IO;
 with ada.numerics.discrete_random;
 with Ada.Containers; use Ada.Containers;
 with Ada.Containers.Vectors;
+with Ada.Numerics.Float_Random;
 
 procedure main is
    addition: array (0..Parameters.d-1, 0..1) of integer;
    i, j: integer := 0;
+
 
    package Integer_Vectors is new Ada.Containers.Vectors
      (Index_Type   => Natural,
@@ -105,18 +107,29 @@ procedure main is
       end loop;
    end add_vectors;
 
+   function get_delay return float is
+      RNG : Ada.Numerics.Float_Random.Generator; 
+      delay_s : Float;
+   begin
+      Ada.Numerics.Float_Random.reset(RNG);
+      delay_s := Ada.Numerics.Float_Random.Random(RNG);
+      return delay_s + Parameters.delayy;
+   end get_delay;
+
    --thread of the printer
    task Printer is
       entry Go (Msg: String);
    end Printer ;
 
    task body Printer is
+   d: float;
    begin
       loop
          select
             accept Go (Msg : String) do
                put_line(Msg);
-               delay 1.0;
+               d := get_delay;
+               delay duration(d);
             end Go;
          or
             terminate;
@@ -167,6 +180,7 @@ procedure main is
    end Receiver;
 
    task body Receiver is
+   d: float;
    begin
        loop
          select
@@ -176,9 +190,11 @@ procedure main is
          or
             accept Receive (Pack: Packagee) do
                Printer.Go("pakiet " & Integer'Image(Pack.id) & " zostal odebrany");
-               delay 2.0;
+               d := get_delay;
+               delay duration(d);
                if Pack.id = Parameters.k-1 then
-                  delay 2.0;
+                  d := get_delay;
+                  delay duration(d);
                   Statistics.Stat;
                end if;
             end Receive;
@@ -205,6 +221,7 @@ procedure main is
       use Rand_Int;
       gen2 : Generator;
       tmppack : Packagee;
+      d: float;
    begin
       loop
          select
@@ -235,7 +252,8 @@ procedure main is
 
             end if;
 
-            delay 1.0;
+            d := get_delay;
+            delay duration(d);
          or
             terminate;
 
@@ -250,16 +268,17 @@ procedure main is
    end Sender ;
 
    task body Sender is
+   d : float;
    begin
          accept StartSending do
             null;
          end StartSending; 
          for i2 in 0..Parameters.k-1 loop
                tasks(0).Channel(all_packages(i2));
-               delay 1.0;
+               d := get_delay;
+               delay duration(d);
          end loop;
    end Sender;
-
 
 begin
    randomN;
