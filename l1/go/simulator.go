@@ -9,9 +9,10 @@ import (
 )
 
 const (
-	n = 5
-	d = 2
-	k = 3
+	n     = 5
+	d     = 2
+	k     = 3
+	delay = 2000
 )
 
 type vertex struct {
@@ -95,7 +96,8 @@ func vertex_routine(v *vertex, chans [n]chan *packagee, printer chan<- string) {
 		}
 
 		if v.empty == false {
-			time.Sleep(1 * time.Second)
+			delayy := rand.Intn(delay)
+			time.Sleep(time.Duration(delayy) * time.Millisecond)
 			l := len(v.where_to_go)
 			rand := rand.Intn(l)
 			x := v.where_to_go[rand]
@@ -103,7 +105,8 @@ func vertex_routine(v *vertex, chans [n]chan *packagee, printer chan<- string) {
 			channel <- p
 			v.empty = true
 		}
-		time.Sleep(1 * time.Second)
+		delayy := rand.Intn(delay)
+		time.Sleep(time.Duration(delayy) * time.Millisecond)
 	}
 
 }
@@ -121,7 +124,8 @@ func receiver(pickup <-chan *packagee, printer chan<- string, finished chan bool
 				finished <- true
 			}
 		}
-		time.Sleep(1 * time.Second)
+		delayy := rand.Intn(delay)
+		time.Sleep(time.Duration(delayy) * time.Millisecond)
 	}
 }
 
@@ -129,7 +133,8 @@ func sender(pack []*packagee, to0 chan<- *packagee) {
 
 	for i := 0; i < k; i++ {
 		to0 <- pack[i]
-		time.Sleep(2 * time.Second)
+		delayy := rand.Intn(delay)
+		time.Sleep(time.Duration(delayy) * time.Millisecond)
 	}
 }
 
@@ -151,11 +156,13 @@ func destiny(v *vertex, chans [n]chan *packagee, pickup chan<- *packagee, printe
 		}
 
 		if v.empty == false {
-			time.Sleep(1 * time.Second)
+			delayy := rand.Intn(delay)
+			time.Sleep(time.Duration(delayy) * time.Millisecond)
 			pickup <- p
 			v.empty = true
 		}
-		time.Sleep(1 * time.Second)
+		delayy := rand.Intn(delay)
+		time.Sleep(time.Duration(delayy) * time.Millisecond)
 
 	}
 
