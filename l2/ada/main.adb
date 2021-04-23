@@ -240,6 +240,7 @@ procedure main is
    task type Taskvertex is
       entry Starttask (Vert: Verticle);
       entry Channel (Pack: Packagee);
+      entry Traps;
    end Taskvertex;
 
    --array with tasks
@@ -253,6 +254,7 @@ procedure main is
       gen2 : Generator;
       tmppack : Packagee;
       d: float;
+      trap: Integer;
    begin
       loop
          select
@@ -260,35 +262,44 @@ procedure main is
                ver := Vert;
             end Starttask;
          or
+            accept Traps do
+               trap := 1;
+            end Traps;
+         or
             accept Channel (Pack: Packagee) do
                tmppack := Pack;
-               if tmppack.Step <= Parameters.h then
+               if tmppack.Step <= Parameters.h  and trap = 0 then
                   all_verticles(ver.id).packages.append(Pack.id);
                   all_packages(Pack.id).visited_vertices.append(ver.id);
                end if;
             end Channel;
 
-            tmppack.Step := tmppack.Step + 1;
-            if tmppack.Step > Parameters.h + 1 then
-               Printer.Go("pakiet " & Integer'Image(tmppack.id) & " umarł ");
-               tmppack.Dead := 1;
-               Receiver.Receive(tmppack);
+            if trap = 1 then
+               Printer.Go("pakiet " & Integer'Image(tmppack.id) & " wpadł w pułapkę ");
+               trap := 0;
             else
-               if ver.id = Parameters.n-1  then
-               Printer.Go("pakiet " & Integer'Image(tmppack.id) & " jest w wierzcholku " & Integer'Image(ver.id));
-               Receiver.Receive(tmppack);
+               tmppack.Step := tmppack.Step + 1;
+               if tmppack.Step > Parameters.h + 1 then
+                  Printer.Go("pakiet " & Integer'Image(tmppack.id) & " umarł ");
+                  tmppack.Dead := 1;
+                  Receiver.Receive(tmppack);
                else
+                  if ver.id = Parameters.n-1  then
                   Printer.Go("pakiet " & Integer'Image(tmppack.id) & " jest w wierzcholku " & Integer'Image(ver.id));
-
-                  if ver.where_to_go.Length = 1 then
-                     numm := ver.id + 1;
-                     where := ver.where_to_go(0);
+                  Receiver.Receive(tmppack);
                   else
-                     numm := Integer(random(gen2)) mod Integer(ver.where_to_go.Length);
-                     where := ver.where_to_go(numm);
-                  end if;
-                  tasks(where).Channel(tmppack);
+                     Printer.Go("pakiet " & Integer'Image(tmppack.id) & " jest w wierzcholku " & Integer'Image(ver.id));
 
+                     if ver.where_to_go.Length = 1 then
+                        numm := ver.id + 1;
+                        where := ver.where_to_go(0);
+                     else
+                        numm := Integer(random(gen2)) mod Integer(ver.where_to_go.Length);
+                        where := ver.where_to_go(numm);
+                     end if;
+                     tasks(where).Channel(tmppack);
+
+                  end if;
                end if;
             end if;
 
@@ -301,6 +312,30 @@ procedure main is
       end loop;
    end Taskvertex;
 
+   task Poacher is
+      entry Start3;
+   end Poacher;
+
+   task body Poacher is
+   package Rand_Int is new ada.numerics.discrete_random(Integer);
+   use Rand_Int;
+   gen3 : Generator;
+   trap: integer;
+   begin
+       loop
+         select
+            accept Start3 do
+               delay 0.8;
+               trap := Integer(random(gen3)) mod Parameters.n-1;
+               tasks(trap).Traps;
+               delay 1.5;
+            end Start3;
+         or
+            terminate;
+            
+         end select;
+      end loop;
+   end Poacher;
 
    -- thread of the sender
    task Sender is
@@ -356,5 +391,6 @@ begin
 
    Sender.StartSending;
    Receiver.Start2;
+   Poacher.Start3;
 
 end main;

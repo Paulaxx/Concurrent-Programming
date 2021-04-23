@@ -132,7 +132,7 @@ func vertex_routine(v *vertex, chans [n]chan *packagee, printer chan<- string, p
 					pack.visited_vertices = append(pack.visited_vertices, v.id)
 					v.packages = append(v.packages, pack.id)
 				} else {
-					msg = "pakiet " + strconv.Itoa(pack.id) + " wpadł w pułapkę " + strconv.Itoa(counter)
+					msg = "pakiet " + strconv.Itoa(pack.id) + " wpadł w pułapkę "
 					trap = false
 					p.dead = true
 				}
