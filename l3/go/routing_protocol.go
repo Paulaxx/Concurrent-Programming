@@ -18,9 +18,9 @@ type pair struct {
 	cost        int
 }
 
-type packet struct {
-	id      int
-	channel chan []pair
+type pack struct {
+	id     int
+	packet []pair
 }
 
 type vertex struct {
@@ -89,24 +89,48 @@ func contains(neighbors []int, find int) bool {
 	return false
 }
 
-func store_routing_table(id int, routing_table []routing_table_item, change_changed <-chan int, get_actual_routing_table <-chan int,
-	routing_table_chan chan []routing_table_item, done chan bool, replacement <-chan what_to_change) {
+func receiver_fun(to_receiver chan pack, routing_table_chan2 chan []routing_table_item, get_actual_routing_table2 chan<- int, replacement chan<- what_to_change) {
+
+	for {
+		select {
+		case p := <-to_receiver:
+			for j, p2 := range p.packet {
+				new_cost := 1 + p2.cost
+				get_actual_routing_table2 <- 0
+				routing_table := <-routing_table_chan2
+				if routing_table[j].cost > new_cost {
+					new_item := routing_table_item{nexthop: p.id, cost: new_cost, changed: true}
+					to_change := what_to_change{id: j, item: new_item}
+					replacement <- to_change
+				}
+			}
+		}
+	}
+}
+
+func store_routing_table(id int, routing_table []routing_table_item, change_changed chan int, get_actual_routing_table chan int,
+	routing_table_chan chan<- []routing_table_item, done chan<- bool, replacement chan what_to_change, get_actual_routing_table2 chan int,
+	routing_table_chan2 chan<- []routing_table_item) {
 
 	for {
 		select {
 		case j := <-change_changed:
 			routing_table[j].changed = !routing_table[j].changed
 			//done <- true
+			fmt.Println("routing_table ", id, "zmienia changed na pozycji ", j, "na ", routing_table[j].changed)
 		case <-get_actual_routing_table:
 			routing_table_chan <- routing_table
+		case <-get_actual_routing_table2:
+			routing_table_chan2 <- routing_table
 		case repl := <-replacement:
 			routing_table[repl.id] = repl.item
 			done <- true
+			fmt.Println("routing_table ", id, "podmienia na pozycji ", repl.id, "na ", repl.item)
 		}
 	}
 }
 
-func sender(v vertex, get_actual_routing_table chan int, routing_table_chan <-chan []routing_table_item, receivers []chan []pair, change_changed chan int) {
+func sender(v vertex, get_actual_routing_table chan<- int, routing_table_chan chan []routing_table_item, receivers [n]chan pack, change_changed chan<- int) {
 
 	for {
 		get_actual_routing_table <- 0
@@ -119,14 +143,20 @@ func sender(v vertex, get_actual_routing_table chan int, routing_table_chan <-ch
 				change_changed <- id
 			}
 		}
-		for _, element := range v.where_to_go {
-			receivers[element] <- packet
+		if len(packet) > 0 {
+			fmt.Println("sender wysyla packet: ", packet)
+			for _, element := range v.where_to_go {
+				pack := pack{id: v.id, packet: packet}
+				receivers[element] <- pack
+			}
 		}
 		time.Sleep(2000 * time.Millisecond)
 	}
 }
 
 func main() {
+
+	finished := make(chan bool)
 
 	additional := make([]int, n)
 	which := make([]int, n)
@@ -163,15 +193,21 @@ func main() {
 	print_edges(edges)
 
 	// kanaly do wysylania pakietow do receivera i odbierania tych pakietow przez receivera
-	var receiver [n]chan []pair
+	var receiver [n]chan pack
 	for i := range receiver {
-		receiver[i] = make(chan []pair, n*n)
+		receiver[i] = make(chan pack, n*n)
 	}
 
-	// kanaly do wysylania aktualnego routing table
+	// kanaly do wysylania aktualnego routing table dla sendera
 	var return_actual_routing_table [n]chan []routing_table_item
 	for i := range return_actual_routing_table {
 		return_actual_routing_table[i] = make(chan []routing_table_item, n*n)
+	}
+
+	// kanaly do wysylania aktualnego routing table dla receivera
+	var return_actual_routing_table2 [n]chan []routing_table_item
+	for i := range return_actual_routing_table2 {
+		return_actual_routing_table2[i] = make(chan []routing_table_item, n*n)
 	}
 
 	// kanaly do zmiany parametru changed na otrzymanej pozycji
@@ -180,10 +216,16 @@ func main() {
 		change_changed[i] = make(chan int, n*n)
 	}
 
-	// kanaly do wyslania zapytania o aktualna routing table
+	// kanaly do wyslania zapytania o aktualna routing table dla sendera'a
 	var get_actual_routing_table [n]chan int
 	for i := range get_actual_routing_table {
 		get_actual_routing_table[i] = make(chan int, n*n)
+	}
+
+	// kanaly do wyslania zapytania o aktualna routing table dla receiver'a
+	var get_actual_routing_table2 [n]chan int
+	for i := range get_actual_routing_table2 {
+		get_actual_routing_table2[i] = make(chan int, n*n)
 	}
 
 	var done [n]chan bool
@@ -219,7 +261,16 @@ func main() {
 				routing_table[j] = item
 			}
 		}
-		go store_routing_table(i, routing_table, change_changed[i], get_actual_routing_table[i], return_actual_routing_table[i], done[i], channel_to_change[i])
+		go store_routing_table(i, routing_table, change_changed[i], get_actual_routing_table[i], return_actual_routing_table[i], done[i], channel_to_change[i],
+			get_actual_routing_table2[i], return_actual_routing_table2[i])
 	}
+
+	for i := 0; i < n; i++ {
+		x := vertex{id: i, where_to_go: edges[i]}
+		go sender(x, get_actual_routing_table[i], return_actual_routing_table[i], receiver, change_changed[i])
+		go receiver_fun(receiver[i], return_actual_routing_table2[i], get_actual_routing_table2[i], channel_to_change[i])
+	}
+
+	<-finished
 
 }
