@@ -4,7 +4,11 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"os"
+	"os/signal"
 	"sort"
+	"strconv"
+	"syscall"
 	"time"
 )
 
@@ -89,7 +93,17 @@ func contains(neighbors []int, find int) bool {
 	return false
 }
 
-func receiver_fun(to_receiver chan pack, routing_table_chan2 chan []routing_table_item, get_actual_routing_table2 chan<- int, replacement chan<- what_to_change) {
+func printing(printer <-chan string) {
+
+	for {
+		select {
+		case message := <-printer:
+			fmt.Println(message)
+		}
+	}
+}
+
+func receiver_fun(to_receiver chan pack, routing_table_chan2 chan []routing_table_item, get_actual_routing_table2 chan<- int, replacement chan<- what_to_change, printer chan<- string) {
 
 	for {
 		select {
@@ -110,14 +124,15 @@ func receiver_fun(to_receiver chan pack, routing_table_chan2 chan []routing_tabl
 
 func store_routing_table(id int, routing_table []routing_table_item, change_changed chan int, get_actual_routing_table chan int,
 	routing_table_chan chan<- []routing_table_item, done chan<- bool, replacement chan what_to_change, get_actual_routing_table2 chan int,
-	routing_table_chan2 chan<- []routing_table_item) {
+	routing_table_chan2 chan<- []routing_table_item, printer chan<- string) {
 
 	for {
 		select {
 		case j := <-change_changed:
 			routing_table[j].changed = !routing_table[j].changed
 			//done <- true
-			fmt.Println("routing_table ", id, "zmienia changed na pozycji ", j, "na ", routing_table[j].changed)
+			msg := "routing_table " + strconv.Itoa(id) + " zmienia changed na pozycji " + strconv.Itoa(j) + " na " + strconv.FormatBool(routing_table[j].changed)
+			printer <- msg
 		case <-get_actual_routing_table:
 			routing_table_chan <- routing_table
 		case <-get_actual_routing_table2:
@@ -125,26 +140,31 @@ func store_routing_table(id int, routing_table []routing_table_item, change_chan
 		case repl := <-replacement:
 			routing_table[repl.id] = repl.item
 			done <- true
-			fmt.Println("routing_table ", id, "podmienia na pozycji ", repl.id, "na ", repl.item)
+			msg := "routing_table " + strconv.Itoa(id) + " podmienia na pozycji " + strconv.Itoa(repl.id) + " na " + "{ " + strconv.Itoa(repl.item.nexthop) + " " + strconv.Itoa(repl.item.cost) + " " + strconv.FormatBool(repl.item.changed) + " }"
+			printer <- msg
 		}
 	}
 }
 
-func sender(v vertex, get_actual_routing_table chan<- int, routing_table_chan chan []routing_table_item, receivers [n]chan pack, change_changed chan<- int) {
+func sender(v vertex, get_actual_routing_table chan<- int, routing_table_chan chan []routing_table_item, receivers [n]chan pack, change_changed chan<- int, printer chan<- string) {
 
 	for {
 		get_actual_routing_table <- 0
 		routing_table := <-routing_table_chan
 		var packet []pair
+		msg1 := "[ "
 		for id, element := range routing_table {
 			if element.changed == true {
 				pair := pair{verticle_id: id, cost: routing_table[id].cost}
+				msg1 += "{" + strconv.Itoa(id) + " " + strconv.Itoa(routing_table[id].cost) + "} "
 				packet = append(packet, pair)
 				change_changed <- id
 			}
 		}
+		msg1 += "]"
 		if len(packet) > 0 {
-			fmt.Println("sender wysyla packet: ", packet)
+			msg := "sender " + strconv.Itoa(v.id) + " wysyla packet: " + msg1
+			printer <- msg
 			for _, element := range v.where_to_go {
 				pack := pack{id: v.id, packet: packet}
 				receivers[element] <- pack
@@ -154,7 +174,19 @@ func sender(v vertex, get_actual_routing_table chan<- int, routing_table_chan ch
 	}
 }
 
+func SetupCloseHandler() {
+	c := make(chan os.Signal)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-c
+		fmt.Println("\r- Ctrl+C pressed in Terminal")
+		os.Exit(0)
+	}()
+}
+
 func main() {
+
+	SetupCloseHandler()
 
 	finished := make(chan bool)
 
@@ -238,6 +270,9 @@ func main() {
 		channel_to_change[i] = make(chan what_to_change, n*n)
 	}
 
+	printer := make(chan string, n*n)
+	go printing(printer)
+
 	var nexthop, cost int
 	var changed bool
 	for i := 0; i < n; i++ {
@@ -261,14 +296,15 @@ func main() {
 				routing_table[j] = item
 			}
 		}
+		fmt.Println(i, " ", routing_table)
 		go store_routing_table(i, routing_table, change_changed[i], get_actual_routing_table[i], return_actual_routing_table[i], done[i], channel_to_change[i],
-			get_actual_routing_table2[i], return_actual_routing_table2[i])
+			get_actual_routing_table2[i], return_actual_routing_table2[i], printer)
 	}
 
 	for i := 0; i < n; i++ {
 		x := vertex{id: i, where_to_go: edges[i]}
-		go sender(x, get_actual_routing_table[i], return_actual_routing_table[i], receiver, change_changed[i])
-		go receiver_fun(receiver[i], return_actual_routing_table2[i], get_actual_routing_table2[i], channel_to_change[i])
+		go sender(x, get_actual_routing_table[i], return_actual_routing_table[i], receiver, change_changed[i], printer)
+		go receiver_fun(receiver[i], return_actual_routing_table2[i], get_actual_routing_table2[i], channel_to_change[i], printer)
 	}
 
 	<-finished
