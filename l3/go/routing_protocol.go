@@ -108,13 +108,13 @@ func receiver_fun(to_receiver chan pack, routing_table_chan2 chan []routing_tabl
 	for {
 		select {
 		case p := <-to_receiver:
-			for j, p2 := range p.packet {
+			for _, p2 := range p.packet {
 				new_cost := 1 + p2.cost
 				get_actual_routing_table2 <- 0
 				routing_table := <-routing_table_chan2
-				if routing_table[j].cost > new_cost {
+				if routing_table[p2.verticle_id].cost > new_cost {
 					new_item := routing_table_item{nexthop: p.id, cost: new_cost, changed: true}
-					to_change := what_to_change{id: j, item: new_item}
+					to_change := what_to_change{id: p2.verticle_id, item: new_item}
 					replacement <- to_change
 				}
 			}
@@ -179,7 +179,7 @@ func SetupCloseHandler() {
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-c
-		fmt.Println("\r- Ctrl+C pressed in Terminal")
+
 		os.Exit(0)
 	}()
 }
@@ -188,7 +188,7 @@ func main() {
 
 	SetupCloseHandler()
 
-	finished := make(chan bool)
+	//finished := make(chan bool)
 
 	additional := make([]int, n)
 	which := make([]int, n)
@@ -273,6 +273,7 @@ func main() {
 	printer := make(chan string, n*n)
 	go printing(printer)
 
+	var r_table [][]routing_table_item
 	var nexthop, cost int
 	var changed bool
 	for i := 0; i < n; i++ {
@@ -296,6 +297,7 @@ func main() {
 				routing_table[j] = item
 			}
 		}
+		r_table = append(r_table, routing_table)
 		fmt.Println(i, " ", routing_table)
 		go store_routing_table(i, routing_table, change_changed[i], get_actual_routing_table[i], return_actual_routing_table[i], done[i], channel_to_change[i],
 			get_actual_routing_table2[i], return_actual_routing_table2[i], printer)
@@ -306,7 +308,9 @@ func main() {
 		go sender(x, get_actual_routing_table[i], return_actual_routing_table[i], receiver, change_changed[i], printer)
 		go receiver_fun(receiver[i], return_actual_routing_table2[i], get_actual_routing_table2[i], channel_to_change[i], printer)
 	}
-
-	<-finished
+	time.Sleep(time.Second * 20)
+	for i := 0; i < n; i++ {
+		fmt.Println(r_table[i])
+	}
 
 }
