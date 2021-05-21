@@ -12,6 +12,8 @@ import (
 	"time"
 )
 
+var finished chan bool
+
 const (
 	n = 5
 	d = 2
@@ -130,7 +132,6 @@ func store_routing_table(id int, routing_table []routing_table_item, change_chan
 		select {
 		case j := <-change_changed:
 			routing_table[j].changed = !routing_table[j].changed
-			//done <- true
 			msg := "routing_table " + strconv.Itoa(id) + " zmienia changed na pozycji " + strconv.Itoa(j) + " na " + strconv.FormatBool(routing_table[j].changed)
 			printer <- msg
 		case <-get_actual_routing_table:
@@ -179,8 +180,8 @@ func SetupCloseHandler() {
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-c
-
-		os.Exit(0)
+		finished <- true
+		//os.Exit(0)
 	}()
 }
 
@@ -188,7 +189,7 @@ func main() {
 
 	SetupCloseHandler()
 
-	//finished := make(chan bool)
+	finished = make(chan bool)
 
 	additional := make([]int, n)
 	which := make([]int, n)
@@ -298,7 +299,6 @@ func main() {
 			}
 		}
 		r_table = append(r_table, routing_table)
-		fmt.Println(i, " ", routing_table)
 		go store_routing_table(i, routing_table, change_changed[i], get_actual_routing_table[i], return_actual_routing_table[i], done[i], channel_to_change[i],
 			get_actual_routing_table2[i], return_actual_routing_table2[i], printer)
 	}
@@ -308,7 +308,10 @@ func main() {
 		go sender(x, get_actual_routing_table[i], return_actual_routing_table[i], receiver, change_changed[i], printer)
 		go receiver_fun(receiver[i], return_actual_routing_table2[i], get_actual_routing_table2[i], channel_to_change[i], printer)
 	}
-	time.Sleep(time.Second * 20)
+	//time.Sleep(time.Second * 20)
+	<-finished
+	fmt.Println("")
+	fmt.Println("Końcowy stan routing_table dla każdego wierzchołka")
 	for i := 0; i < n; i++ {
 		fmt.Println(r_table[i])
 	}
