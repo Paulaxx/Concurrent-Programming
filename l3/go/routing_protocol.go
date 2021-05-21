@@ -308,7 +308,6 @@ func main() {
 		go sender(x, get_actual_routing_table[i], return_actual_routing_table[i], receiver, change_changed[i], printer)
 		go receiver_fun(receiver[i], return_actual_routing_table2[i], get_actual_routing_table2[i], channel_to_change[i], printer)
 	}
-	//time.Sleep(time.Second * 20)
 	<-finished
 	fmt.Println("")
 	fmt.Println("Końcowy stan routing_table dla każdego wierzchołka")
