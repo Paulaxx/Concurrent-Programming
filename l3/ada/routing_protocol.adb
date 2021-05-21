@@ -27,9 +27,45 @@ procedure routing_protocol is
         changed : Boolean;
     end record;
 
+
     edges: array (0..Parameters.n) of Vector;
-    r_table: array(0..Parameters.n) of routing_table_item;
     all_verticles: array (0..Parameters.n) of Verticle;
+    type routing_table_type is array(0..Parameters.n-1) of routing_table_item;
+    type routing_table_all_type is array(0..Parameters.n-1) of routing_table_type;
+    r_table: routing_table_type;
+
+    protected type Obj is
+        procedure Set (new_table : routing_table_type);
+        procedure Set2 (item : routing_table_item; id : Integer);
+        procedure SetChange(id : Integer; new_changed : Boolean);
+        function Get return routing_table_type;
+    private
+        table : routing_table_type;
+    end Obj;
+
+    protected body Obj is
+        procedure Set (new_table : routing_table_type) is
+        begin
+            table := new_table;
+        end Set;
+
+        procedure Set2 (item : routing_table_item; id : Integer) is
+        begin
+            table(id) := item;
+        end Set2;
+
+        procedure SetChange(id : Integer; new_changed : Boolean) is
+        begin
+            table(id).changed := new_changed;
+        end SetChange;
+
+        function Get return routing_table_type is
+        begin
+            return table;
+        end Get;
+    end Obj;
+
+    protected_routing_tables: array (0..Parameters.n-1) of Obj;
 
     function exist(x, y, size : in integer) return integer is
         i : integer := 0;
@@ -143,15 +179,19 @@ begin
                 r_table(j).changed := FALSE;
             end if;
         end loop;
-
-        for i in 0..Parameters.n loop
-            Put(Integer'Image(r_table(i).cost));
-            put(" ");
-            Put(Integer'Image(r_table(i).nexthop));
-            put(" ");
-            put("   ");
-        end loop;
-        new_line(1);
+        protected_routing_tables(i).Set(r_table);
+        
     end loop;
+
+    --for i in 0..Parameters.n-1 loop
+        --for j in 0..Parameters.n-1 loop
+            --Put(Integer'Image(routing_tables_all(i)(j).cost));
+            --put(" ");
+            --Put(Integer'Image(routing_tables_all(i)(j).nexthop));
+            --put(" ");
+            --put("   ");
+        --end loop;
+    --end loop;
+    --new_line(1);
 
 end routing_protocol;
