@@ -69,6 +69,7 @@ procedure routing_protocol is
         procedure SetId (idd : Integer);
         procedure SetChange(id : Integer; new_changed : Boolean);
         function Get return routing_table_type;
+        procedure PrintStatistics;
     private
         table : routing_table_type;
         id : Integer;
@@ -101,6 +102,16 @@ procedure routing_protocol is
         begin
             return table;
         end Get;
+
+        procedure PrintStatistics is
+        begin
+            put("[");
+            for i in 0..Parameters.n-1 loop
+                put("{" & Integer'Image(table(i).nexthop) & " " & Integer'Image(table(i).cost) & "} " );
+            end loop;
+            put("]");
+            put_line("");
+        end PrintStatistics;
     end Obj;
 
     protected_routing_tables: array (0..Parameters.n-1) of Obj;
@@ -203,7 +214,12 @@ procedure routing_protocol is
                id_receiver := Idd;
             end Start2;
          or
-            accept GetPacket(packet : to_send) do
+            accept GetPacket(packe
+
+    procedure statistics is
+    begin
+        
+    end statistics; t : to_send) do
                p := packet.packett;
                l := packet.l;
             end GetPacket;
@@ -230,9 +246,11 @@ procedure routing_protocol is
    end Receiver;
 
 
-   task Sender is
+   task type Sender is
       entry Start(V : Verticle);
    end Sender;
+
+   tasks2: array(0..Parameters.n-1) of Sender;
 
    task body Sender is
    verticlee : Verticle;
@@ -324,7 +342,13 @@ begin
         tasks(i).Start2(i);
     end loop;
     for i in 0..Parameters.n-1 loop
-        Sender.Start(all_verticles(i));
+        tasks2(i).Start(all_verticles(i));
     end loop;
+
+    delay 20.0;
+    for i in 0..Parameters.n-1 loop
+        protected_routing_tables(i).PrintStatistics;
+    end loop;
+
 
 end routing_protocol;
