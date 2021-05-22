@@ -39,8 +39,8 @@ procedure routing_protocol is
     end record;
 
 
-    edges: array (0..Parameters.n) of Integer_Vectors.Vector;
-    all_verticles: array (0..Parameters.n) of Verticle;
+    edges: array (0..Parameters.n-1) of Integer_Vectors.Vector;
+    all_verticles: array (0..Parameters.n-1) of Verticle;
     type routing_table_type is array(0..Parameters.n-1) of routing_table_item;
     type routing_table_all_type is array(0..Parameters.n-1) of routing_table_type;
     r_table: routing_table_type;
@@ -72,7 +72,7 @@ procedure routing_protocol is
         procedure PrintStatistics;
     private
         table : routing_table_type;
-        id : Integer;
+        my_id : Integer;
     end Obj;
 
     protected body Obj is
@@ -83,18 +83,18 @@ procedure routing_protocol is
 
         procedure SetId (idd : Integer) is
         begin
-            id := idd;
+            my_id := idd;
         end SetId;
 
         procedure Set2 (item : routing_table_item; id : Integer) is
         begin
-            put_line("routing_table " & Integer'Image(id) & " podmienia na pozycji " & Integer'Image(id) & " na { " & Integer'Image(item.nexthop) & " " & Integer'Image(item.cost) & " }");
+            put_line("routing_table " & Integer'Image(my_id) & " podmienia na pozycji " & Integer'Image(id) & " na { " & Integer'Image(item.nexthop) & " " & Integer'Image(item.cost) & " }");
             table(id) := item;
         end Set2;
 
         procedure SetChange(id : Integer; new_changed : Boolean) is
         begin
-            put_line("routing_table" & Integer'Image(id) & " zmienia changed na pozycji " & Integer'Image(id));
+            put_line("routing_table" & Integer'Image(my_id) & " zmienia changed na pozycji " & Integer'Image(id));
             table(id).changed := new_changed;
         end SetChange;
 
@@ -130,9 +130,9 @@ procedure routing_protocol is
     function neighbor(v : Verticle; n : integer) return integer is
         i : integer := 0;
         vert: Integer_Vectors.Vector := v.where_to_go;
-        size: integer := 0;
+        size: integer := Integer(v.where_to_go.Length);
     begin
-        for i in 0..size loop
+        for i in 0..size-1 loop
             if vert(i) = n then
                 return 1;
             end if;
@@ -184,7 +184,7 @@ procedure routing_protocol is
     procedure add_vectors is
         V2 : Integer_Vectors.Vector;
     begin
-        for j in 0..Parameters.n loop
+        for j in 0..Parameters.n-1 loop
             V2 := make_vector(j);
             edges(j) := V2;
         end loop;
@@ -214,12 +214,7 @@ procedure routing_protocol is
                id_receiver := Idd;
             end Start2;
          or
-            accept GetPacket(packe
-
-    procedure statistics is
-    begin
-        
-    end statistics; t : to_send) do
+            accept GetPacket(packet : to_send) do
                p := packet.packett;
                l := packet.l;
             end GetPacket;
@@ -230,17 +225,15 @@ procedure routing_protocol is
                 put("{" & Integer'Image(actual_packet.j) & " " & Integer'Image(actual_packet.cost) & "} ");
                 actual_routing_table := protected_routing_tables(id_receiver).Get;
                 new_cost := 1 + actual_packet.cost;
-                if new_cost < actual_routing_table(i).cost then
+                if new_cost < actual_routing_table(actual_packet.j).cost then
                     new_routing_table_item.cost := new_cost;
                     new_routing_table_item.nexthop := l;
                     new_routing_table_item.changed := TRUE;
-                    protected_routing_tables(id_receiver).Set2(new_routing_table_item, i);
+                    protected_routing_tables(id_receiver).Set2(new_routing_table_item, actual_packet.j);
                 end if;
             end loop;
             put("]");
             Put_Line("");
-         or
-            terminate;
          end select;
       end loop;
    end Receiver;
@@ -268,7 +261,7 @@ procedure routing_protocol is
             end Start;
             append(msg, "sender " & Integer'Image(id) & " wysyla pakiet [");
             loop
-                delay 3.0;
+                delay 0.5;
                 package_to_send.Clear;
                 routing_tablee := protected_routing_tables(id).Get;
                 for i in 0..Parameters.n-1 loop
@@ -282,7 +275,7 @@ procedure routing_protocol is
                 end loop;
                 append(msg, "]");
                 to_send_pck.l := id;
-                    to_send_pck.packett := package_to_send;
+                to_send_pck.packett := package_to_send;
                     
                 if package_to_send.Length /= 0 then
                     size := Standard.Integer(verticlee.where_to_go.Length);
@@ -308,7 +301,7 @@ begin
         end loop;
     end loop;
 
-    for i in 0..Parameters.n loop
+    for i in 0..Parameters.n-1 loop
         all_verticles(i).id := i;
         all_verticles(i).where_to_go := edges(i);
     end loop;
@@ -337,6 +330,9 @@ begin
         protected_routing_tables(i).SetId(i);
         
     end loop;
+    for i in 0..Parameters.n-1 loop
+        protected_routing_tables(i).PrintStatistics;
+    end loop;
 
     for i in 0..Parameters.n-1 loop
         tasks(i).Start2(i);
@@ -345,7 +341,7 @@ begin
         tasks2(i).Start(all_verticles(i));
     end loop;
 
-    delay 20.0;
+    delay 30.0;
     for i in 0..Parameters.n-1 loop
         protected_routing_tables(i).PrintStatistics;
     end loop;
