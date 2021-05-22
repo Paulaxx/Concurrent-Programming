@@ -215,6 +215,8 @@ procedure routing_protocol is
                         new_routing_table_item.cost := new_cost;
                         new_routing_table_item.nexthop := packet.l;
                         new_routing_table_item.changed := TRUE;
+                        protected_routing_tables(id_receiver).Set2(new_routing_table_item, i);
+                        put("podmianka");
                     end if;
                end loop;
                put("]");
