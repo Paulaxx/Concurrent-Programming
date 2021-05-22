@@ -11,14 +11,17 @@ procedure routing_protocol is
     addition: array (0..Parameters.d-1, 0..1) of integer;
     i, j: integer := 0;
 
-    package Integer_Vectors is new Ada.Containers.Vectors
-    (Index_Type   => Natural,
-    Element_Type => Integer);
-    use Integer_Vectors;
+    package Integer_Vectors is new Ada.Containers.Vectors(Index_Type   => Natural, Element_Type => Integer);
+    type package_item is record
+        j : Integer;
+        cost: Integer;
+    end record;
+
+    package Package_Vectors is new Ada.Containers.Vectors(Index_Type   => Natural, Element_Type => package_item);
 
     type Verticle is record
         Id : Integer;
-        where_to_go: Vector;
+        where_to_go: Integer_Vectors.Vector;
     end record;
 
     type routing_table_item is record
@@ -27,8 +30,13 @@ procedure routing_protocol is
         changed : Boolean;
     end record;
 
+    type to_send is record
+        l : Integer;
+        packett : Package_Vectors.Vector;
+    end record;
 
-    edges: array (0..Parameters.n) of Vector;
+
+    edges: array (0..Parameters.n) of Integer_Vectors.Vector;
     all_verticles: array (0..Parameters.n) of Verticle;
     type routing_table_type is array(0..Parameters.n-1) of routing_table_item;
     type routing_table_all_type is array(0..Parameters.n-1) of routing_table_type;
@@ -80,7 +88,7 @@ procedure routing_protocol is
 
     function neighbor(v : Verticle; n : integer) return integer is
         i : integer := 0;
-        vert: Vector := v.where_to_go;
+        vert: Integer_Vectors.Vector := v.where_to_go;
         size: integer := 0;
     begin
         for i in 0..size loop
@@ -112,8 +120,8 @@ procedure routing_protocol is
         end loop;
     end randomN; 
 
-    function make_vector(i: in integer) return vector is
-        V : Vector;
+    function make_vector(i: in integer) return Integer_Vectors.vector is
+        V : Integer_Vectors.Vector;
     begin
         if i < Parameters.n-1 then
             V.append(i+1);
@@ -133,13 +141,113 @@ procedure routing_protocol is
     end make_vector;
 
     procedure add_vectors is
-        V2 : Vector;
+        V2 : Integer_Vectors.Vector;
     begin
         for j in 0..Parameters.n loop
             V2 := make_vector(j);
             edges(j) := V2;
         end loop;
     end add_vectors;
+
+    task Printer is
+      entry Go (Msg: String);
+   end Printer ;
+
+   task body Printer is
+   begin
+      loop
+         select
+            accept Go (Msg : String) do
+               put_line(Msg);
+               delay 1.0;
+            end Go;
+         or
+            terminate;
+         end select;
+      end loop;
+   end Printer;
+
+   task type Receiver is
+      entry Start2(Idd : integer);
+      entry GetPacket(packet : to_send);
+   end Receiver;
+
+   tasks: array(0..Parameters.n-1) of Receiver;
+
+   task body Receiver is
+   id_receiver: integer;
+   new_routing_table_item : routing_table_item;
+   actual_packet : package_item;
+   actual_routing_table : routing_table_type;
+   new_cost : Integer;
+   p : Package_Vectors.Vector;
+   size : integer;
+   begin
+       loop
+         select
+            accept Start2(Idd : integer) do
+               id_receiver := Idd;
+            end Start2;
+         or
+            accept GetPacket(packet : to_send) do
+               p := packet.packett;
+               size := Standard.Integer(packet.packett.Length);
+               for i in 0..size loop
+                    actual_packet := p(i);
+                    actual_routing_table := protected_routing_tables(id_receiver).Get;
+                    new_cost := 1 + actual_packet.cost;
+                    if new_cost < actual_routing_table(i).cost then
+                        new_routing_table_item.cost := new_cost;
+                        new_routing_table_item.nexthop := packet.l;
+                        new_routing_table_item.changed := TRUE;
+                    end if;
+               end loop;
+            end GetPacket;
+         or
+            terminate;
+         end select;
+      end loop;
+   end Receiver;
+
+
+   task Sender is
+      entry Start(V : Verticle);
+   end Sender;
+
+   task body Sender is
+   verticlee : Verticle;
+   id: integer;
+   routing_tablee : routing_table_type;
+   package_itemm : package_item;
+   to_send_pck : to_send;
+   package_to_send : Package_Vectors.Vector;
+   size : Integer;
+   begin
+            accept Start(V : Verticle) do
+               verticlee := V;
+               id := verticlee.id;
+               loop
+                    delay 3.0;
+                    package_to_send.Clear;
+                    routing_tablee := protected_routing_tables(id).Get;
+                    for i in 0..Parameters.n-1 loop
+                        if routing_tablee(i).changed = TRUE then
+                            protected_routing_tables(id).SetChange(i, FALSE);
+                            package_itemm.j := i;
+                            package_itemm.cost := routing_tablee(i).cost;
+                            package_to_send.append(package_itemm);
+                        end if;
+                    end loop;
+                    to_send_pck.l := id;
+                    to_send_pck.packett := package_to_send;
+                    
+                    size := Standard.Integer(verticlee.where_to_go.Length);
+                    for i in 0..size loop
+                        tasks(verticlee.where_to_go(i)).GetPacket(to_send_pck);
+                    end loop;
+               end loop;
+            end Start;
+   end Sender;
 
 begin
     randomN;
@@ -182,16 +290,5 @@ begin
         protected_routing_tables(i).Set(r_table);
         
     end loop;
-
-    --for i in 0..Parameters.n-1 loop
-        --for j in 0..Parameters.n-1 loop
-            --Put(Integer'Image(routing_tables_all(i)(j).cost));
-            --put(" ");
-            --Put(Integer'Image(routing_tables_all(i)(j).nexthop));
-            --put(" ");
-            --put("   ");
-        --end loop;
-    --end loop;
-    --new_line(1);
 
 end routing_protocol;
