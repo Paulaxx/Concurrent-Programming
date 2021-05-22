@@ -5,6 +5,9 @@ with ada.numerics.discrete_random;
 with Ada.Containers; use Ada.Containers;
 with Ada.Containers.Vectors;
 with Ada.Numerics.Float_Random;
+with Ada.Strings.Unbounded; use Ada.Strings.Unbounded;
+with Ada.Strings.Unbounded.Text_IO; use Ada.Strings.Unbounded.Text_IO;
+
 
 procedure routing_protocol is
 
@@ -42,13 +45,33 @@ procedure routing_protocol is
     type routing_table_all_type is array(0..Parameters.n-1) of routing_table_type;
     r_table: routing_table_type;
 
+    task Printer is
+      entry Go (Msg: String);
+    end Printer ;
+
+    task body Printer is
+    begin
+       loop
+            select
+                accept Go (Msg : String) do
+                    put_line(Msg);
+                    delay 1.0;
+                end Go;
+            or
+                terminate;
+            end select;
+        end loop;
+   end Printer;
+
     protected type Obj is
         procedure Set (new_table : routing_table_type);
         procedure Set2 (item : routing_table_item; id : Integer);
+        procedure SetId (idd : Integer);
         procedure SetChange(id : Integer; new_changed : Boolean);
         function Get return routing_table_type;
     private
         table : routing_table_type;
+        id : Integer;
     end Obj;
 
     protected body Obj is
@@ -57,13 +80,20 @@ procedure routing_protocol is
             table := new_table;
         end Set;
 
+        procedure SetId (idd : Integer) is
+        begin
+            id := idd;
+        end SetId;
+
         procedure Set2 (item : routing_table_item; id : Integer) is
         begin
+            put_line("routing_table " & Integer'Image(id) & " podmienia na pozycji " & Integer'Image(id) & " na { " & Integer'Image(item.nexthop) & " " & Integer'Image(item.cost) & " }");
             table(id) := item;
         end Set2;
 
         procedure SetChange(id : Integer; new_changed : Boolean) is
         begin
+            put_line("routing_table" & Integer'Image(id) & " zmienia changed na pozycji " & Integer'Image(id));
             table(id).changed := new_changed;
         end SetChange;
 
@@ -149,24 +179,6 @@ procedure routing_protocol is
         end loop;
     end add_vectors;
 
-    task Printer is
-      entry Go (Msg: String);
-   end Printer ;
-
-   task body Printer is
-   begin
-      loop
-         select
-            accept Go (Msg : String) do
-               put_line(Msg);
-               delay 1.0;
-            end Go;
-         or
-            terminate;
-         end select;
-      end loop;
-   end Printer;
-
    task type Receiver is
       entry Start2(Idd : integer);
       entry GetPacket(packet : to_send);
@@ -182,6 +194,7 @@ procedure routing_protocol is
    new_cost : Integer;
    p : Package_Vectors.Vector;
    size : integer;
+   msg : String := "";
    begin
        loop
          select
@@ -190,10 +203,12 @@ procedure routing_protocol is
             end Start2;
          or
             accept GetPacket(packet : to_send) do
+               put("receiver " & Integer'Image(id_receiver) & " otrzymal pakiet [");
                p := packet.packett;
                size := Standard.Integer(packet.packett.Length);
-               for i in 0..size loop
+               for i in 0..size-1 loop
                     actual_packet := p(i);
+                    put("{" & Integer'Image(actual_packet.j) & " " & Integer'Image(actual_packet.cost) & "} ");
                     actual_routing_table := protected_routing_tables(id_receiver).Get;
                     new_cost := 1 + actual_packet.cost;
                     if new_cost < actual_routing_table(i).cost then
@@ -202,6 +217,8 @@ procedure routing_protocol is
                         new_routing_table_item.changed := TRUE;
                     end if;
                end loop;
+               put("]");
+               Put_Line("");
             end GetPacket;
          or
             terminate;
@@ -222,10 +239,12 @@ procedure routing_protocol is
    to_send_pck : to_send;
    package_to_send : Package_Vectors.Vector;
    size : Integer;
+   msg : unbounded_string;
    begin
             accept Start(V : Verticle) do
                verticlee := V;
                id := verticlee.id;
+               append(msg, "sender " & Integer'Image(id) & " wysyla pakiet [");
                loop
                     delay 3.0;
                     package_to_send.Clear;
@@ -236,18 +255,24 @@ procedure routing_protocol is
                             package_itemm.j := i;
                             package_itemm.cost := routing_tablee(i).cost;
                             package_to_send.append(package_itemm);
+                            append(msg, "{" & Integer'Image(package_itemm.j) & " " & Integer'Image(package_itemm.cost) & "} ");
                         end if;
                     end loop;
+                    append(msg, "]");
                     to_send_pck.l := id;
                     to_send_pck.packett := package_to_send;
                     
-                    size := Standard.Integer(verticlee.where_to_go.Length);
-                    for i in 0..size loop
-                        tasks(verticlee.where_to_go(i)).GetPacket(to_send_pck);
-                    end loop;
+                    if package_to_send.Length /= 0 then
+                        size := Standard.Integer(verticlee.where_to_go.Length);
+                        put_line(to_string(msg));
+                        for i in 0..size-1 loop
+                            tasks(verticlee.where_to_go(i)).GetPacket(to_send_pck);
+                        end loop;
+                    end if;
                end loop;
             end Start;
    end Sender;
+
 
 begin
     randomN;
@@ -288,7 +313,15 @@ begin
             end if;
         end loop;
         protected_routing_tables(i).Set(r_table);
+        protected_routing_tables(i).SetId(i);
         
+    end loop;
+
+    for i in 0..Parameters.n-1 loop
+        tasks(i).Start2(i);
+    end loop;
+    for i in 0..Parameters.n-1 loop
+        Sender.Start(all_verticles(i));
     end loop;
 
 end routing_protocol;
