@@ -193,6 +193,7 @@ procedure routing_protocol is
    actual_routing_table : routing_table_type;
    new_cost : Integer;
    p : Package_Vectors.Vector;
+   l : Integer;
    size : integer;
    msg : String := "";
    begin
@@ -203,25 +204,25 @@ procedure routing_protocol is
             end Start2;
          or
             accept GetPacket(packet : to_send) do
-               put("receiver " & Integer'Image(id_receiver) & " otrzymal pakiet [");
                p := packet.packett;
-               size := Standard.Integer(packet.packett.Length);
-               for i in 0..size-1 loop
-                    actual_packet := p(i);
-                    put("{" & Integer'Image(actual_packet.j) & " " & Integer'Image(actual_packet.cost) & "} ");
-                    actual_routing_table := protected_routing_tables(id_receiver).Get;
-                    new_cost := 1 + actual_packet.cost;
-                    if new_cost < actual_routing_table(i).cost then
-                        new_routing_table_item.cost := new_cost;
-                        new_routing_table_item.nexthop := packet.l;
-                        new_routing_table_item.changed := TRUE;
-                        protected_routing_tables(id_receiver).Set2(new_routing_table_item, i);
-                        put("podmianka");
-                    end if;
-               end loop;
-               put("]");
-               Put_Line("");
+               l := packet.l;
             end GetPacket;
+            put("receiver " & Integer'Image(id_receiver) & " otrzymal pakiet [");
+            size := Standard.Integer(p.Length);
+            for i in 0..size-1 loop
+                actual_packet := p(i);
+                put("{" & Integer'Image(actual_packet.j) & " " & Integer'Image(actual_packet.cost) & "} ");
+                actual_routing_table := protected_routing_tables(id_receiver).Get;
+                new_cost := 1 + actual_packet.cost;
+                if new_cost < actual_routing_table(i).cost then
+                    new_routing_table_item.cost := new_cost;
+                    new_routing_table_item.nexthop := l;
+                    new_routing_table_item.changed := TRUE;
+                    protected_routing_tables(id_receiver).Set2(new_routing_table_item, i);
+                end if;
+            end loop;
+            put("]");
+            Put_Line("");
          or
             terminate;
          end select;
@@ -246,33 +247,33 @@ procedure routing_protocol is
             accept Start(V : Verticle) do
                verticlee := V;
                id := verticlee.id;
-               append(msg, "sender " & Integer'Image(id) & " wysyla pakiet [");
-               loop
-                    delay 3.0;
-                    package_to_send.Clear;
-                    routing_tablee := protected_routing_tables(id).Get;
-                    for i in 0..Parameters.n-1 loop
-                        if routing_tablee(i).changed = TRUE then
-                            protected_routing_tables(id).SetChange(i, FALSE);
-                            package_itemm.j := i;
-                            package_itemm.cost := routing_tablee(i).cost;
-                            package_to_send.append(package_itemm);
-                            append(msg, "{" & Integer'Image(package_itemm.j) & " " & Integer'Image(package_itemm.cost) & "} ");
-                        end if;
-                    end loop;
-                    append(msg, "]");
-                    to_send_pck.l := id;
+            end Start;
+            append(msg, "sender " & Integer'Image(id) & " wysyla pakiet [");
+            loop
+                delay 3.0;
+                package_to_send.Clear;
+                routing_tablee := protected_routing_tables(id).Get;
+                for i in 0..Parameters.n-1 loop
+                    if routing_tablee(i).changed = TRUE then
+                        protected_routing_tables(id).SetChange(i, FALSE);
+                        package_itemm.j := i;
+                        package_itemm.cost := routing_tablee(i).cost;
+                        package_to_send.append(package_itemm);
+                        append(msg, "{" & Integer'Image(package_itemm.j) & " " & Integer'Image(package_itemm.cost) & "} ");
+                    end if;
+                end loop;
+                append(msg, "]");
+                to_send_pck.l := id;
                     to_send_pck.packett := package_to_send;
                     
-                    if package_to_send.Length /= 0 then
-                        size := Standard.Integer(verticlee.where_to_go.Length);
-                        put_line(to_string(msg));
-                        for i in 0..size-1 loop
-                            tasks(verticlee.where_to_go(i)).GetPacket(to_send_pck);
-                        end loop;
-                    end if;
-               end loop;
-            end Start;
+                if package_to_send.Length /= 0 then
+                    size := Standard.Integer(verticlee.where_to_go.Length);
+                    put_line(to_string(msg));
+                    for i in 0..size-1 loop
+                        tasks(verticlee.where_to_go(i)).GetPacket(to_send_pck);
+                    end loop;
+                end if;
+            end loop;
    end Sender;
 
 
