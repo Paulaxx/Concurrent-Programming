@@ -54,7 +54,8 @@ procedure routing_protocol is
        loop
             select
                 accept Go (Msg : String) do
-                    put_line(Msg);
+                    put(Msg);
+                    put_line("");
                     delay 1.0;
                 end Go;
             or
@@ -206,7 +207,7 @@ procedure routing_protocol is
    p : Package_Vectors.Vector;
    l : Integer;
    size : integer;
-   msg : String := "";
+   msg : unbounded_string;
    begin
        loop
          select
@@ -217,23 +218,24 @@ procedure routing_protocol is
             accept GetPacket(packet : to_send) do
                p := packet.packett;
                l := packet.l;
+               msg := To_Unbounded_String("");
+               append(msg, "receiver " & Integer'Image(id_receiver) & " otrzymal pakiet [");
+                size := Standard.Integer(p.Length);
+                for i in 0..size-1 loop
+                    actual_packet := p(i);
+                    append(msg, "{" & Integer'Image(actual_packet.j) & " " & Integer'Image(actual_packet.cost) & "} ");
+                    actual_routing_table := protected_routing_tables(id_receiver).Get;
+                    new_cost := 1 + actual_packet.cost;
+                    if new_cost < actual_routing_table(actual_packet.j).cost then
+                        new_routing_table_item.cost := new_cost;
+                        new_routing_table_item.nexthop := l;
+                        new_routing_table_item.changed := TRUE;
+                        protected_routing_tables(id_receiver).Set2(new_routing_table_item, actual_packet.j);
+                    end if;
+                end loop;
+                append(msg, "]");
+                Printer.Go(to_string(msg));
             end GetPacket;
-            put("receiver " & Integer'Image(id_receiver) & " otrzymal pakiet [");
-            size := Standard.Integer(p.Length);
-            for i in 0..size-1 loop
-                actual_packet := p(i);
-                put("{" & Integer'Image(actual_packet.j) & " " & Integer'Image(actual_packet.cost) & "} ");
-                actual_routing_table := protected_routing_tables(id_receiver).Get;
-                new_cost := 1 + actual_packet.cost;
-                if new_cost < actual_routing_table(actual_packet.j).cost then
-                    new_routing_table_item.cost := new_cost;
-                    new_routing_table_item.nexthop := l;
-                    new_routing_table_item.changed := TRUE;
-                    protected_routing_tables(id_receiver).Set2(new_routing_table_item, actual_packet.j);
-                end if;
-            end loop;
-            put("]");
-            Put_Line("");
          end select;
       end loop;
    end Receiver;
@@ -259,10 +261,11 @@ procedure routing_protocol is
                verticlee := V;
                id := verticlee.id;
             end Start;
-            append(msg, "sender " & Integer'Image(id) & " wysyla pakiet [");
             loop
                 delay 0.5;
                 package_to_send.Clear;
+                msg := To_Unbounded_String("");
+                append(msg, "sender " & Integer'Image(id) & " wysyla pakiet [");
                 routing_tablee := protected_routing_tables(id).Get;
                 for i in 0..Parameters.n-1 loop
                     if routing_tablee(i).changed = TRUE then
@@ -279,7 +282,7 @@ procedure routing_protocol is
                     
                 if package_to_send.Length /= 0 then
                     size := Standard.Integer(verticlee.where_to_go.Length);
-                    put_line(to_string(msg));
+                    Printer.Go(to_string(msg));
                     for i in 0..size-1 loop
                         tasks(verticlee.where_to_go(i)).GetPacket(to_send_pck);
                     end loop;
@@ -330,9 +333,6 @@ begin
         protected_routing_tables(i).SetId(i);
         
     end loop;
-    for i in 0..Parameters.n-1 loop
-        protected_routing_tables(i).PrintStatistics;
-    end loop;
 
     for i in 0..Parameters.n-1 loop
         tasks(i).Start2(i);
@@ -341,7 +341,9 @@ begin
         tasks2(i).Start(all_verticles(i));
     end loop;
 
-    delay 30.0;
+    delay 40.0;
+    put_line("");
+    put_line("Koncowy stan routing_tables");
     for i in 0..Parameters.n-1 loop
         protected_routing_tables(i).PrintStatistics;
     end loop;
