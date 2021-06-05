@@ -1,4 +1,4 @@
 package Parameters is
-    n : constant := 5;
-    d : constant := 2;
+    n : constant := 8;
+    d : constant := 5;
 end Parameters;

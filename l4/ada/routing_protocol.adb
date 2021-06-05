@@ -13,6 +13,7 @@ procedure routing_protocol is
 
     addition: array (0..Parameters.d-1, 0..1) of integer;
     i, j: integer := 0;
+    counter: Integer;
 
     package Integer_Vectors is new Ada.Containers.Vectors(Index_Type   => Natural, Element_Type => Integer);
     type package_item is record
@@ -69,7 +70,7 @@ procedure routing_protocol is
     protected_queues: array (0..Parameters.n-1) of ForwarderQueue;
 
     task type Host_task is
-    entry Start(H : Host);
+    entry Start(H : Host; id: Integer);
     entry SendPacket(packet : Package_standard);
     end Host_task;
 
@@ -88,7 +89,7 @@ procedure routing_protocol is
         entry GetStandardPacket(packet : Package_standard);
     end ForwarderReceiver;
 
-   ForwarderReceivers: array(0..Parameters.n-1) of ForwarderReceiver;
+    ForwarderReceivers: array(0..Parameters.n-1) of ForwarderReceiver;
 
     task body ForwarderReceiver is
     verticlee : Verticle;
@@ -109,40 +110,52 @@ procedure routing_protocol is
     end ForwarderReceiver;
 
     task body Host_task is
-    hostt : host;
-    type randRange is new Integer range 0..Integer(all_hosts.Length)-1;
-    package Rand_Int is new ada.numerics.discrete_random(randRange);
-    use Rand_Int;
-    gen : Generator;
-    random_host : integer;
-    pack : Package_standard;
-    empty_vector : Integer_Vectors.Vector;
-    verticle_id : Integer;
-    position : Integer;
+        hostt : Host;
+        package Rand_Int3 is new ada.numerics.discrete_random(Integer);
+        use Rand_Int3;
+        gen3 : Generator;
+        random_host : Integer;
+        pack : Package_standard;
+        empty_vector : Integer_Vectors.Vector;
+        verticle_id : Integer;
+        position : Integer;
+        size : Integer;
+        packet2 : Package_standard;
+        host_id : Integer;
     begin
-            loop
-                select 
-                    accept Start(H : Host) do
-                    delay 1.0;
-                    hostt := H;
-                    verticle_id := hostt.r;
-                    random_host := Integer(random(gen));
-                    pack.receiver := all_hosts(random_host);
-                    pack.sender := hostt;
-                    pack.visited := empty_vector;
-                    ForwarderReceivers(hostt.r).GetStandardPacket(pack);
-                    end Start;
-                or
-                    accept SendPacket(packet : Package_standard) do
-                        -- TO DO: print packet
-                        delay 0.5;
-                        pack.receiver := packet.sender;
-                        pack.sender := hostt;
-                        position := in_which_position_first_host(verticle_id) + hostt.h;
-                        host_tasks(position).SendPacket(pack);
-                    end SendPacket;
-                end select;
+        accept Start(H : Host; id: Integer) do
+            reset(gen3);
+            hostt := H;
+            host_id := id;
+        end Start;
+        verticle_id := hostt.r;
+        random_host := Integer(random(gen3)) mod Integer(counter);
+        while random_host = host_id loop
+            reset(gen3);
+            random_host := Integer(random(gen3)) mod Integer(counter);
+        end loop;
+        pack.receiver := all_hosts(random_host);
+        pack.sender := hostt;
+        pack.visited := empty_vector;
+        ForwarderReceivers(hostt.r).GetStandardPacket(pack);
+        loop
+            accept SendPacket(packet : Package_standard) do
+                packet2 := packet;
+            end SendPacket;
+            put("packet from host h:" & Integer'Image(packet2.sender.h) & " r:" & Integer'Image(packet2.sender.r) & " to host h:" & Integer'Image(packet2.receiver.h) 
+            & " r:" & Integer'Image(packet2.receiver.r) & " with visited routers: ");
+            size := Integer(packet2.visited.Length);
+            for i in 0..size-1 loop
+                put(Integer'Image(packet2.visited(i)) & " ");
             end loop;
+            put_line("");
+            delay 0.5;
+            packet2.receiver := packet2.sender;
+            packet2.sender := hostt;
+            packet2.visited := empty_vector;
+            position := in_which_position_first_host(verticle_id) + hostt.h;
+            ForwarderReceivers(hostt.r).GetStandardPacket(packet2);
+        end loop;
     end Host_task;
 
 
@@ -167,12 +180,12 @@ procedure routing_protocol is
     r_table: routing_table_type;
 
     task Printer is
-      entry Go (Msg: String);
+        entry Go (Msg: String);
     end Printer ;
 
     task body Printer is
     begin
-       loop
+        loop
             select
                 accept Go (Msg : String) do
                     put(Msg);
@@ -183,7 +196,7 @@ procedure routing_protocol is
                 terminate;
             end select;
         end loop;
-   end Printer;
+    end Printer;
 
     protected type Obj is
         procedure Set (new_table : routing_table_type);
@@ -210,13 +223,11 @@ procedure routing_protocol is
 
         procedure Set2 (item : routing_table_item; id : Integer) is
         begin
-            put_line("routing_table " & Integer'Image(my_id) & " podmienia na pozycji " & Integer'Image(id) & " na { " & Integer'Image(item.nexthop) & " " & Integer'Image(item.cost) & " }");
             table(id) := item;
         end Set2;
 
         procedure SetChange(id : Integer; new_changed : Boolean) is
         begin
-            put_line("routing_table" & Integer'Image(my_id) & " zmienia changed na pozycji " & Integer'Image(id));
             table(id).changed := new_changed;
         end SetChange;
 
@@ -264,7 +275,7 @@ procedure routing_protocol is
 
     function produce_hosts(Id : Integer) return Hosts_Vectors.Vector is
     new_hosts: Hosts_Vectors.Vector;
-    type randRange2 is new Integer range 0..(Parameters.n/2);
+    type randRange2 is new Integer range 0..(1);
     package Rand_Int2 is new ada.numerics.discrete_random(randRange2);
     use Rand_Int2;
     gen2 : Generator;
@@ -272,6 +283,7 @@ procedure routing_protocol is
     i : integer := 0;
     host_item : Host;
     begin
+        reset(gen2);
         hosts_num := Integer(random(gen2));
         for i in 0..hosts_num-1 loop
             host_item.r := Id;
@@ -332,29 +344,29 @@ procedure routing_protocol is
         end loop;
     end add_vectors;
 
-   task type Receiver is
-      entry Start2(Idd : integer);
-      entry GetPacket(packet : to_send);
-   end Receiver;
+    task type Receiver is
+        entry Start2(Idd : integer);
+        entry GetPacket(packet : to_send);
+    end Receiver;
 
-   tasks: array(0..Parameters.n-1) of Receiver;
+    tasks: array(0..Parameters.n-1) of Receiver;
 
-   task body Receiver is
-   id_receiver: integer;
-   new_routing_table_item : routing_table_item;
-   actual_packet : package_item;
-   actual_routing_table : routing_table_type;
-   new_cost : Integer;
-   p : Package_Vectors.Vector;
-   l : Integer;
-   size : integer;
-   begin
-       loop
-         select
+    task body Receiver is
+        id_receiver: integer;
+        new_routing_table_item : routing_table_item;
+        actual_packet : package_item;
+        actual_routing_table : routing_table_type;
+        new_cost : Integer;
+        p : Package_Vectors.Vector;
+        l : Integer;
+        size : integer;
+    begin
+        loop
+            select
             accept Start2(Idd : integer) do
-               id_receiver := Idd;
+                id_receiver := Idd;
             end Start2;
-         or
+        or
             accept GetPacket(packet : to_send) do
                 p := packet.packett;
                 l := packet.l;
@@ -371,32 +383,33 @@ procedure routing_protocol is
                     end if;
                 end loop;
             end GetPacket;
-         end select;
-      end loop;
-   end Receiver;
+            end select;
+        end loop;
+    end Receiver;
 
 
-   task type Sender is
-      entry Start(V : Verticle);
-   end Sender;
+    task type Sender is
+        entry Start(V : Verticle);
+    end Sender;
 
-   tasks2: array(0..Parameters.n-1) of Sender;
+    tasks2: array(0..Parameters.n-1) of Sender;
 
-   task body Sender is
-   verticlee : Verticle;
-   id: integer;
-   routing_tablee : routing_table_type;
-   package_itemm : package_item;
-   to_send_pck : to_send;
-   package_to_send : Package_Vectors.Vector;
-   size : Integer;
-   begin
+    task body Sender is
+    verticlee : Verticle;
+    id: integer;
+    routing_tablee : routing_table_type;
+    package_itemm : package_item;
+    to_send_pck : to_send;
+    package_to_send : Package_Vectors.Vector;
+    size : Integer;
+    begin
             accept Start(V : Verticle) do
-               verticlee := V;
-               id := verticlee.id;
+                verticlee := V;
+                id := verticlee.id;
             end Start;
+            delay 6.0;
             loop
-                delay 0.5;
+                delay 1.0;
                 package_to_send.Clear;
                 routing_tablee := protected_routing_tables(id).Get;
                 for i in 0..Parameters.n-1 loop
@@ -417,47 +430,49 @@ procedure routing_protocol is
                     end loop;
                 end if;
             end loop;
-   end Sender;
+    end Sender;
 
-   task type ForwarderSender is
-      entry StartForwarderSender(V : Verticle);
-   end ForwarderSender;
+    task type ForwarderSender is
+        entry StartForwarderSender(V : Verticle);
+    end ForwarderSender;
 
-   ForwarderSenders: array(0..Parameters.n-1) of ForwarderSender;
+    ForwarderSenders: array(0..Parameters.n-1) of ForwarderSender;
 
-   task body ForwarderSender is
-   verticlee : Verticle;
-   id: integer;
-   sended_pack : Package_standard;
-   routing_tablee : routing_table_type;
-   n : Integer;
-   queue: Package_Standard_Vectors.Vector;
-   position : Integer;
-   begin
+    task body ForwarderSender is
+    verticlee : Verticle;
+    id: integer;
+    sended_pack : Package_standard;
+    routing_tablee : routing_table_type;
+    n : Integer;
+    queue: Package_Standard_Vectors.Vector;
+    position : Integer;
+    begin
             accept StartForwarderSender(V : Verticle) do
                 verticlee := V;
                 id := verticlee.id;
             end StartForwarderSender;
             loop
+                delay 0.5;
                 queue := protected_queues(id).Get;
-                sended_pack := queue(0);
-                Package_Standard_Vectors.Delete_First(queue, 1);
-                protected_queues(id).Swap(queue);
-                sended_pack.visited.append(id);
-                if sended_pack.receiver.r = id then
-                    position := in_which_position_first_host(id) + sended_pack.receiver.h;
-                    host_tasks(position).SendPacket(sended_pack);
-                else
-                    routing_tablee := protected_routing_tables(id).Get;
-                    n := routing_tablee(sended_pack.receiver.r).nexthop;
-                    protected_queues(n).Add(sended_pack);
+                if queue.Length > 0 then
+                    sended_pack := queue(0);
+                    Package_Standard_Vectors.Delete_First(queue, 1);
+                    protected_queues(id).Swap(queue);
+                    sended_pack.visited.append(id);
+                    if sended_pack.receiver.r = id then
+                        position := in_which_position_first_host(id) + sended_pack.receiver.h;
+                        host_tasks(position).SendPacket(sended_pack);
+                    else
+                        routing_tablee := protected_routing_tables(id).Get;
+                        n := routing_tablee(sended_pack.receiver.r).nexthop;
+                        ForwarderReceivers(n).GetStandardPacket(sended_pack);
+                    end if;
                 end if;
-                delay 1.0;
             end loop;
-   end ForwarderSender;
+    end ForwarderSender;
 
-   size: Integer;
-   counter: Integer;
+    size: Integer;
+    size2: Integer;
 
 begin
     randomN;
@@ -477,6 +492,16 @@ begin
         all_verticles(i).id := i;
         all_verticles(i).where_to_go := edges(i);
         produced_hosts := produce_hosts(i);
+        Put(Integer'Image(i));
+        size2 := Integer(produced_hosts.Length);
+        put(": ");
+        for j in 0..size2-1 loop
+            put(Integer'Image(produced_hosts(j).r));
+            put(" ");
+            put(Integer'Image(produced_hosts(j).h));
+            put(", ");
+        end loop;
+        put_line("");
         all_verticles(i).hosts := produced_hosts;
         all_verticles(i).how_many_hosts := Integer(produced_hosts.Length);
         in_which_position_first_host.append(counter);
@@ -525,8 +550,8 @@ begin
     for i in 0..Parameters.n-1 loop
         produced_hosts := all_verticles(i).hosts;
         size := Integer(produced_hosts.Length);
-        for j in 0..size loop
-            host_tasks(host_tasks_capacity).Start(produced_hosts(j));
+        for j in 0..size-1 loop
+            host_tasks(host_tasks_capacity).Start(produced_hosts(j), host_tasks_capacity);
             host_tasks_capacity := host_tasks_capacity + 1;
         end loop;
     end loop;
@@ -538,5 +563,8 @@ begin
         protected_routing_tables(i).PrintStatistics;
     end loop;
 
+-- packet from host h: 2 r: 5 to host h: 0 r: 1 with visited routers:  5  6  2  1 
+-- packet from host h: 0 r: 2 to host h: 3 r: 2 with visited routers:  2 
+-- packet from host h: 1 r: 8 to host h: 1 r: 3 with visited routers:  8  7  1  2  3 
 
 end routing_protocol;
