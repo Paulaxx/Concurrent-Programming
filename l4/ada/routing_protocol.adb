@@ -224,6 +224,8 @@ procedure routing_protocol is
         procedure Set2 (item : routing_table_item; id : Integer) is
         begin
             table(id) := item;
+            put_line("routing table " & Integer'Image(my_id) & " changed at position " & Integer'Image(id) & " to routing_table_item: [nexthop: " & Integer'Image(item.nexthop) & " cost: "
+            & Integer'Image(item.cost) & "]");
         end Set2;
 
         procedure SetChange(id : Integer; new_changed : Boolean) is
