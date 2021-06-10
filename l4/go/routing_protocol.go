@@ -143,8 +143,17 @@ func receiverForwarder(verticle_id int, add_to_queue chan<- standard_packet, get
 	}
 }
 
+func get_host_position(all_hosts [h]host, host_to_find host) int {
+	for k, v := range all_hosts {
+		if host_to_find == v {
+			return k
+		}
+	}
+	return -1
+}
+
 func receiverSender(verticle_id int, get_packet_from_queue chan standard_packet, send_ask_for_packet chan<- int, hosts [h]chan standard_packet, forwarders [n]chan standard_packet,
-	routing_table_chan chan []routing_table_item) {
+	routing_table_chan chan []routing_table_item, all_hosts [h]host) {
 
 	for {
 		send_ask_for_packet <- 1
@@ -152,7 +161,7 @@ func receiverSender(verticle_id int, get_packet_from_queue chan standard_packet,
 		if new_packet.sender.r != -1 {
 			new_packet.visited_routers = append(new_packet.visited_routers, verticle_id)
 			if new_packet.receiver.r == verticle_id {
-				// wyslanie pakietu do hosta na jakiejs pozycji w tablicy hosts
+				hosts[get_host_position(all_hosts, host{h: new_packet.receiver.h, r: new_packet.receiver.r})] <- new_packet
 			} else {
 				routing_table := <-routing_table_chan
 				var n int = routing_table[new_packet.receiver.r].nexthop
@@ -240,6 +249,37 @@ func sender(v vertex, get_actual_routing_table chan<- int, routing_table_chan ch
 	}
 }
 
+func Find(s [h]host, e host) bool {
+	for _, a := range s {
+		if a == e {
+			return true
+		}
+	}
+	return false
+}
+
+func generate_hosts() [h]host {
+
+	all_hosts := [h]host{}
+	how_many_hosts := make([]int, n)
+	for i := 0; i < h; i++ {
+		how_many_hosts[i] = 0
+	}
+	for i := 0; i < h; i++ {
+		found := true
+		r := 0
+		h := 0
+		for found {
+			r = rand.Intn(n)
+			h = how_many_hosts[r]
+			found = Find(all_hosts, host{h: h, r: r})
+		}
+		how_many_hosts[r]++
+		all_hosts[i] = host{h: h, r: r}
+	}
+	return all_hosts
+}
+
 func SetupCloseHandler() {
 	c := make(chan os.Signal)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
@@ -290,6 +330,8 @@ func main() {
 	}
 	print_edges(edges)
 
+	all_hosts := generate_hosts()
+
 	// kanaly do wysylania pakietow do receivera i odbierania tych pakietow przez receivera
 	var receiver [n]chan pack
 	for i := range receiver {
@@ -333,9 +375,9 @@ func main() {
 	}
 
 	// kanaly do wysylania pakietow kolejki
-	var packet_to_queue [n]chan standard_packet
-	for i := range packet_to_queue {
-		packet_to_queue[i] = make(chan standard_packet, n*n)
+	var send_packet_from_queue [n]chan standard_packet
+	for i := range send_packet_from_queue {
+		send_packet_from_queue[i] = make(chan standard_packet, n*n)
 	}
 
 	// kanaly do wysylania zapytania o pakiet z kolejki
@@ -345,6 +387,7 @@ func main() {
 	}
 
 	// kanaly do dodawania pakietu do kolejki
+	// forwarder dodaje do kolejki
 	var add_packet_to_queue [n]chan standard_packet
 	for i := range add_packet_to_queue {
 		add_packet_to_queue[i] = make(chan standard_packet, n*n)
@@ -403,6 +446,24 @@ func main() {
 		go sender(x, get_actual_routing_table[i], return_actual_routing_table[i], receiver, change_changed[i])
 		go receiver_fun(receiver[i], return_actual_routing_table2[i], get_actual_routing_table2[i], channel_to_change[i])
 	}
+
+	empty_slice := []standard_packet{}
+	for i := 0; i < n; i++ {
+		go receiver_queue(empty_slice, send_packet_from_queue[i], packet_from_queue[i], add_packet_to_queue[i], i)
+	}
+
+	for i := 0; i < n; i++ {
+		go receiverForwarder(i, add_packet_to_queue[i], send_to_receiver[i])
+	}
+
+	for i := 0; i < n; i++ {
+		go receiverSender(i, send_packet_from_queue[i], packet_from_queue[i], hosts_channels, send_to_receiver, return_actual_routing_table[i], all_hosts)
+	}
+
+	for i := 0; i < h; i++ {
+		go host_func(all_hosts[i].r, all_hosts[i].h, send_to_receiver, hosts_channels[i], hosts_channels, all_hosts, i)
+	}
+
 	<-finished
 	fmt.Println("")
 	fmt.Println("Końcowy stan routing_table dla każdego wierzchołka")
