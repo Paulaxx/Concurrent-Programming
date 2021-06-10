@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"sort"
+	"strconv"
 	"syscall"
 	"time"
 )
@@ -14,9 +15,9 @@ import (
 var finished chan bool
 
 const (
-	n = 5
-	d = 2
-	h = 3
+	n = 8
+	d = 5
+	h = 5
 )
 
 type pair struct {
@@ -153,7 +154,7 @@ func get_host_position(all_hosts [h]host, host_to_find host) int {
 }
 
 func receiverSender(verticle_id int, get_packet_from_queue chan standard_packet, send_ask_for_packet chan<- int, hosts [h]chan standard_packet, forwarders [n]chan standard_packet,
-	routing_table_chan chan []routing_table_item, all_hosts [h]host) {
+	routing_table_chan chan []routing_table_item, all_hosts [h]host, get_actual_routing_table chan<- int) {
 
 	for {
 		send_ask_for_packet <- 1
@@ -163,6 +164,7 @@ func receiverSender(verticle_id int, get_packet_from_queue chan standard_packet,
 			if new_packet.receiver.r == verticle_id {
 				hosts[get_host_position(all_hosts, host{h: new_packet.receiver.h, r: new_packet.receiver.r})] <- new_packet
 			} else {
+				get_actual_routing_table <- 0
 				routing_table := <-routing_table_chan
 				var n int = routing_table[new_packet.receiver.r].nexthop
 				forwarders[n] <- new_packet
@@ -182,7 +184,7 @@ func host_func(r int, h int, forwarders [n]chan standard_packet, get_packet chan
 	for {
 		new_packet := <-get_packet
 		fmt.Println(new_packet)
-		time.Sleep(2000 * time.Millisecond)
+		time.Sleep(800 * time.Millisecond)
 		forwarders[r] <- standard_packet{sender: host{h: h, r: r}, receiver: new_packet.sender, visited_routers: []int{}}
 	}
 
@@ -190,6 +192,7 @@ func host_func(r int, h int, forwarders [n]chan standard_packet, get_packet chan
 
 func receiver_fun(to_receiver chan pack, routing_table_chan2 chan []routing_table_item, get_actual_routing_table2 chan<- int, replacement chan<- what_to_change) {
 
+	time.Sleep(4000 * time.Millisecond)
 	for {
 		select {
 		case p := <-to_receiver:
@@ -204,6 +207,7 @@ func receiver_fun(to_receiver chan pack, routing_table_chan2 chan []routing_tabl
 				}
 			}
 		}
+		time.Sleep(2000 * time.Millisecond)
 	}
 }
 
@@ -222,12 +226,15 @@ func store_routing_table(id int, routing_table []routing_table_item, change_chan
 		case repl := <-replacement:
 			routing_table[repl.id] = repl.item
 			done <- true
+			msg := "routing_table " + strconv.Itoa(id) + " podmienia na pozycji " + strconv.Itoa(repl.id) + " na " + "{ " + strconv.Itoa(repl.item.nexthop) + " " + strconv.Itoa(repl.item.cost) + " " + strconv.FormatBool(repl.item.changed) + " }"
+			fmt.Println(msg)
 		}
 	}
 }
 
 func sender(v vertex, get_actual_routing_table chan<- int, routing_table_chan chan []routing_table_item, receivers [n]chan pack, change_changed chan<- int) {
 
+	time.Sleep(3000 * time.Millisecond)
 	for {
 		get_actual_routing_table <- 0
 		routing_table := <-routing_table_chan
@@ -245,7 +252,7 @@ func sender(v vertex, get_actual_routing_table chan<- int, routing_table_chan ch
 				receivers[element] <- pack
 			}
 		}
-		time.Sleep(2000 * time.Millisecond)
+		time.Sleep(8000 * time.Millisecond)
 	}
 }
 
@@ -262,7 +269,7 @@ func generate_hosts() [h]host {
 
 	all_hosts := [h]host{}
 	how_many_hosts := make([]int, n)
-	for i := 0; i < h; i++ {
+	for i := 0; i < n; i++ {
 		how_many_hosts[i] = 0
 	}
 	for i := 0; i < h; i++ {
@@ -331,6 +338,8 @@ func main() {
 	print_edges(edges)
 
 	all_hosts := generate_hosts()
+	fmt.Println(all_hosts)
+	fmt.Println("po hostach")
 
 	// kanaly do wysylania pakietow do receivera i odbierania tych pakietow przez receivera
 	var receiver [n]chan pack
@@ -441,12 +450,6 @@ func main() {
 			get_actual_routing_table2[i], return_actual_routing_table2[i])
 	}
 
-	for i := 0; i < n; i++ {
-		x := vertex{id: i, where_to_go: edges[i]}
-		go sender(x, get_actual_routing_table[i], return_actual_routing_table[i], receiver, change_changed[i])
-		go receiver_fun(receiver[i], return_actual_routing_table2[i], get_actual_routing_table2[i], channel_to_change[i])
-	}
-
 	empty_slice := []standard_packet{}
 	for i := 0; i < n; i++ {
 		go receiver_queue(empty_slice, send_packet_from_queue[i], packet_from_queue[i], add_packet_to_queue[i], i)
@@ -457,18 +460,19 @@ func main() {
 	}
 
 	for i := 0; i < n; i++ {
-		go receiverSender(i, send_packet_from_queue[i], packet_from_queue[i], hosts_channels, send_to_receiver, return_actual_routing_table[i], all_hosts)
+		go receiverSender(i, send_packet_from_queue[i], packet_from_queue[i], hosts_channels, send_to_receiver, return_actual_routing_table[i], all_hosts, get_actual_routing_table[i])
 	}
 
 	for i := 0; i < h; i++ {
 		go host_func(all_hosts[i].r, all_hosts[i].h, send_to_receiver, hosts_channels[i], hosts_channels, all_hosts, i)
 	}
 
-	<-finished
-	fmt.Println("")
-	fmt.Println("Końcowy stan routing_table dla każdego wierzchołka")
 	for i := 0; i < n; i++ {
-		fmt.Println(r_table[i])
+		x := vertex{id: i, where_to_go: edges[i]}
+		go sender(x, get_actual_routing_table[i], return_actual_routing_table[i], receiver, change_changed[i])
+		go receiver_fun(receiver[i], return_actual_routing_table2[i], get_actual_routing_table2[i], channel_to_change[i])
 	}
+
+	<-finished
 
 }
