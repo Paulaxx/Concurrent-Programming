@@ -5,7 +5,7 @@ Exercises from concurrent programming course at Wrocław University of Science a
 simulation of sending packets in a graph
 
 ## List 2 
-extension of list 1 by limiting the number of package transfers
+extension of list 1 by limiting the number of package transfers and adding poacher
 
 ## List 3
 simulation of a routing protocol similar to a protocol RIP
